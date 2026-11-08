@@ -1,0 +1,9 @@
+services:
+  yt-dlp:
+    build:
+      context: ./docker
+      dockerfile: yt-dlp.Dockerfile
+    image: local-yt-dlp
+
+  ffmpeg:
+    image: jrottenberg/ffmpeg:6-ubuntu

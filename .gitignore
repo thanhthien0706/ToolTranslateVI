@@ -1,0 +1,4 @@
+.venv-whisper/
+scripts/__pycache__/
+output/
+*.errors.json
