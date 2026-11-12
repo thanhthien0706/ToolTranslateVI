@@ -3,3 +3,4 @@ scripts/__pycache__/
 output/
 *.errors.json
 data
+.DS_Store

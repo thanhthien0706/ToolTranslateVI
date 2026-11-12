@@ -11,9 +11,26 @@ is meant to be copied wholesale to another machine and just work — all state
 (videos, subtitles, venv) lives inside this folder under `output/` and
 `.venv-whisper/`, never outside it. The input JSON itself may live anywhere.
 
-Read `README.md` (Vietnamese) first — it's the authoritative spec for the
-pipeline's behavior, idempotency rules, and the "self-contained" guarantees.
-Anything below summarizes it for quick orientation; README.md wins on conflict.
+`README.md` (Vietnamese) is a short user guide: how to install and run. The
+technical details (skip rules, why Docker/native, file lifecycle) live in
+this file, not in the README.
+
+## Writing README.md
+
+The user wants the README to be as simple and easy to read as possible.
+When you add or change a feature, update the README following these rules:
+
+- Write in short, plain Vietnamese. Say what to run and what you get, not
+  how it works inside or why it was designed that way.
+- Order: requirements → input file → one-command run (`run_all.sh`) →
+  step-by-step table → optional commands table → a few short notes.
+- Prefer a table or a short example command over a paragraph. One line per
+  command, one short sentence per description.
+- Leave out implementation details (temp `.partial` files, ffmpeg lookup
+  order, hardlinks, validation logic, Docker/Metal reasons). Put those
+  here in CLAUDE.md if they matter.
+- A new feature gets one table row or one example line, not a new section,
+  unless the user asks for more.
 
 ## Pipeline architecture
 
@@ -90,10 +107,9 @@ past individual failures rather than aborting.
   needs Metal GPU access, which Docker's Linux VM on Mac can't provide. It
   must run natively on Apple Silicon, and auto-bootstraps its own venv at
   `./.venv-whisper` on first run (gitignored). This is the one hard
-  environment requirement the tool can't paper over — see README.md
-  "Mức độ độc lập" for the full constraint and the workaround (transcribe on
-  an Apple Silicon machine, copy `chunks.json` elsewhere, if the target
-  machine isn't one).
+  environment requirement the tool can't paper over. Workaround when the
+  target machine isn't Apple Silicon: transcribe on one that is, then copy
+  `chunks.json` over.
 - Step 2 (`02_build_srt.sh`) is pure stdlib `python3`, no dependencies.
 
 ### The translation step is deliberately not a script
