@@ -38,6 +38,39 @@ resolve_dir() {
   fi
 }
 
+# Download with fallbacks. Some sources (e.g. Bilibili) drop the connection
+# on the top-quality stream mid-download, while lower-quality streams work.
+# Tries best quality first (1080p), then caps at 720p. Leftover partial
+# files from a failed attempt are removed before the next one.
+# Usage: download_with_fallback <host-dir> <output-template> <url>
+# On failure, LAST_ERROR holds yt-dlp's last ERROR line.
+LAST_ERROR=""
+download_with_fallback() {
+  local dir="$1" template="$2" url="$3"
+  local log; log="$(mktemp)"
+  local formats=(
+    ""
+    "bv*[height<=720]+ba/b[height<=720]"
+  )
+  local fmt
+  for fmt in "${formats[@]}"; do
+    local args=()
+    if [[ -n "$fmt" ]]; then
+      echo "  retrying with format: $fmt" >&2
+      args=(-f "$fmt")
+    fi
+    # pipefail is on, so a docker failure makes this whole pipeline fail.
+    if docker run --rm -v "$dir":/data "$IMAGE" ${args[@]+"${args[@]}"} -o "$template" "$url" 2>&1 | tee "$log"; then
+      rm -f "$log"
+      return 0
+    fi
+    LAST_ERROR="$(grep -E '^ERROR' "$log" | tail -n 1)"
+    find "$dir" -maxdepth 1 \( -name '*.part' -o -name '*.ytdl' -o -name '*.f[0-9]*.*' \) -delete
+  done
+  rm -f "$log"
+  return 1
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker not found on PATH" >&2
   exit 1
@@ -85,12 +118,12 @@ if [[ "$1" == *.json ]]; then
 
     SAFE_NAME="${NAME//%/%%}"
     echo "  downloading: $NAME"
-    if docker run --rm -v "$TARGET_DIR":/data "$IMAGE" -o "/data/${SAFE_NAME}.%(ext)s" "$URL"; then
+    if download_with_fallback "$TARGET_DIR" "/data/${SAFE_NAME}.%(ext)s" "$URL"; then
       ((DOWNLOADED++))
     else
       echo "  FAILED: $URL"
       ((FAILED++))
-      ENTRY="$(jq ".[$i] + {Step: \"download\", Error: \"yt-dlp exited non-zero\"}" "$JSON")"
+      ENTRY="$(jq --arg err "${LAST_ERROR:-yt-dlp exited non-zero}" ".[$i] + {Step: \"download\", Error: \$err}" "$JSON")"
       jq --argjson obj "$ENTRY" '. + [$obj]' "$ERROR_FILE" > "$ERROR_FILE.tmp" && mv "$ERROR_FILE.tmp" "$ERROR_FILE"
     fi
   done
@@ -125,9 +158,9 @@ else
   if [[ -n "$NAME" ]]; then
     SAFE_NAME="${NAME//%/%%}"
     echo "downloading: $NAME -> $FOLDER_ABS"
-    docker run --rm -v "$FOLDER_ABS":/data "$IMAGE" -o "/data/${SAFE_NAME}.%(ext)s" "$URL"
+    download_with_fallback "$FOLDER_ABS" "/data/${SAFE_NAME}.%(ext)s" "$URL"
   else
     echo "downloading (using video's own title) -> $FOLDER_ABS"
-    docker run --rm -v "$FOLDER_ABS":/data "$IMAGE" -o "/data/%(title)s.%(ext)s" "$URL"
+    download_with_fallback "$FOLDER_ABS" "/data/%(title)s.%(ext)s" "$URL"
   fi
 fi
